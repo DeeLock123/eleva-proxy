@@ -1,39 +1,44 @@
-// main.ts
-const BROWSERLESS_KEY = "2SLAHnqluSvXeMpd5f5659d8ca58eb54c3a5ac4068999d1f9";
+// main.ts (Deno Proxy - Hardcoded API Key)
+
+const API_KEY = "2SLAHnqluSvXeMpd5f5659d8ca58eb54c3a5ac4068999d1f9";
 
 Deno.serve(async (req) => {
-  const url = new URL(req.url);
-  const category = url.searchParams.get("category");
-  const page = url.searchParams.get("page") || "1";
+  const { searchParams } = new URL(req.url);
+  const category = searchParams.get("category") || "accountants";
+  const page = searchParams.get("page") || "1";
 
-  if (!category) {
-    return new Response("Missing 'category' query param", { status: 400 });
-  }
+  const url = `https://www.approvedbusiness.co.uk/search/${category}?page=${page}`;
 
-  const targetUrl = `https://www.approvedbusiness.co.uk/search/${category}?page=${page}`;
-  const browserlessUrl = "https://chrome.browserless.io/content?token=" + BROWSERLESS_KEY;
-
-  const response = await fetch(browserlessUrl, {
+  const browserlessRes = await fetch("https://chrome.browserless.io/content", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Cache-Control": "no-cache",
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${API_KEY}`,
+    },
     body: JSON.stringify({
-      url: targetUrl,
-      waitForSelector: ".listing",
+      url,
+      waitForSelector: "a.button[href^='http']",
+      elements: "a.title_link",
     }),
   });
 
-  const html = await response.text();
+  const data = await browserlessRes.json();
 
-  const companyRegex = /<a class="title_link" href="([^"]+)">([^<]+)<\/a>[\s\S]*?<a class="button" href="(https?:\/\/[^"]+)"[^>]*>Website<\/a>/g;
-  const matches = [...html.matchAll(companyRegex)];
+  if (!Array.isArray(data)) {
+    return new Response(JSON.stringify({ error: "No data returned" }), {
+      headers: { "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
 
-  const results = matches.map((m) => ({
-    company: m[2].trim(),
-    website: m[3].trim(),
-    source: "https://www.approvedbusiness.co.uk" + m[1].trim(),
-  }));
+  const leads = data.map((el: any) => {
+    const title = el.innerText?.trim();
+    const websiteBtn = el.nextElementSibling?.href || null;
+    return title && websiteBtn ? { company: title, website: websiteBtn } : null;
+  }).filter(Boolean);
 
-  return new Response(JSON.stringify(results, null, 2), {
+  return new Response(JSON.stringify(leads, null, 2), {
     headers: { "Content-Type": "application/json" },
   });
 });
