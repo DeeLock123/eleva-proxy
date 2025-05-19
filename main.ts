@@ -1,5 +1,3 @@
-// main.ts
-
 const API_KEY = "2SLAHnqluSvXeMpd5f5659d8ca58eb54c3a5ac4068999d1f9";
 
 Deno.serve(async (req) => {
@@ -16,9 +14,7 @@ Deno.serve(async (req) => {
 
   const response = await fetch(browserlessUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       url: targetUrl,
       waitForSelector: ".listing",
@@ -27,7 +23,7 @@ Deno.serve(async (req) => {
 
   const html = await response.text();
 
-  const companyRegex = /<a class="title_link" href="([^"]+)">([^<]+)<\/a>[\s\S]+?<a class="button" href="(https?:\/\/[^"]+)"/g;
+  const companyRegex = /<a class="title_link" href="(\/company\/\d+\/[^"]+)">([^<]+)<\/a>[\s\S]*?<a class="button" href="(https?:\/\/[^"]+)"/g;
   const matches = [...html.matchAll(companyRegex)];
 
   const results = matches.map((m) => ({
@@ -40,5 +36,3 @@ Deno.serve(async (req) => {
     headers: { "Content-Type": "application/json" },
   });
 });
-
-
