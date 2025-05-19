@@ -1,5 +1,5 @@
 // main.ts
-const BROWSERLESS_KEY = "2SLAHnqluSvXeMp18be79ff955e357e44cfce17df6fb1bd23";
+const BROWSERLESS_KEY = "2SLAHnqluSvXeMpd5f5659d8ca58eb54c3a5ac4068999d1f9";
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
