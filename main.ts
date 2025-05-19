@@ -1,38 +1,42 @@
 // main.ts
-Deno.serve(async (req) => {
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+
+// Replace this with your real Browserless token:
+const BROWSERLESS_TOKEN = "2SLAHnqluSvXeMp18be79ff955e357e44cfce17df6fb1bd23";
+
+serve(async (req) => {
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
   const page = searchParams.get("page") || "1";
 
   if (!category) {
-    return new Response(JSON.stringify({ error: "Missing category" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response("Missing category parameter", { status: 400 });
   }
 
   const targetUrl = `https://www.approvedbusiness.co.uk/search/${category}?page=${page}`;
+  const browserlessUrl = `https://chrome.browserless.io/content?token=${BROWSERLESS_TOKEN}`;
 
-  try {
-    const res = await fetch(targetUrl);
-    const html = await res.text();
+  // Get fully rendered HTML from Browserless
+  const response = await fetch(browserlessUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: targetUrl })
+  });
 
-    const companyBlocks = [...html.matchAll(/<a class="title_link" href="\/company\/\d+\/[^"]+">([^<]+)<\/a>[\s\S]+?<a class="button" href="(https?:\/\/[^"]+)"/g)];
+  const html = await response.text();
 
-    const results = companyBlocks.map(([, name, website]) => ({
-      name: name.trim(),
-      website: website.trim(),
-      source: targetUrl
-    }));
+  // Match company name and website button
+  const regex = /<a class="title_link" href="[^"]*">(.*?)<\/a>[\s\S]*?<a class="button" href="(https?:\/\/[^"]+)"/g;
+  const matches = [...html.matchAll(regex)];
 
-    return new Response(JSON.stringify(results, null, 2), {
-      headers: { "Content-Type": "application/json" },
-    });
+  const companies = matches.map(match => ({
+    name: match[1].trim(),
+    website: match[2].trim(),
+    source: targetUrl
+  }));
 
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  return new Response(JSON.stringify(companies, null, 2), {
+    headers: { "Content-Type": "application/json" }
+  });
 });
+
