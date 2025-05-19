@@ -1,24 +1,38 @@
-import { serve } from "https://deno.land/std/http/server.ts";
-
-serve(async (req) => {
+// main.ts
+Deno.serve(async (req) => {
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
-  const page = searchParams.get("page");
+  const page = searchParams.get("page") || "1";
 
-  if (!category || !page) {
-    return new Response("Missing query parameters", { status: 400 });
+  if (!category) {
+    return new Response(JSON.stringify({ error: "Missing category" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
-  const targetUrl = `https://www.approvedbusiness.co.uk/${category}/list_${page}.aspx`;
-  console.log(`🔍 Fetching: ${targetUrl}`);
+  const targetUrl = `https://www.approvedbusiness.co.uk/search/${category}?page=${page}`;
 
   try {
-    const rawHtml = await fetch(targetUrl).then(res => res.text());
+    const res = await fetch(targetUrl);
+    const html = await res.text();
 
-    return new Response(rawHtml, {
-      headers: { "Content-Type": "text/html" },
+    const companyBlocks = [...html.matchAll(/<a class="title_link" href="\/company\/\d+\/[^"]+">([^<]+)<\/a>[\s\S]+?<a class="button" href="(https?:\/\/[^"]+)"/g)];
+
+    const results = companyBlocks.map(([, name, website]) => ({
+      name: name.trim(),
+      website: website.trim(),
+      source: targetUrl
+    }));
+
+    return new Response(JSON.stringify(results, null, 2), {
+      headers: { "Content-Type": "application/json" },
     });
+
   } catch (err) {
-    return new Response(`❌ Error fetching target: ${err.message}`, { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 });
