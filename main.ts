@@ -1,44 +1,46 @@
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.36/deno-dom-wasm.ts";
+// Import the working version of DOMParser
+import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
-  const page = searchParams.get("page");
+  const page = searchParams.get("page") || "1";
 
-  if (!category || !page) {
-    return new Response("Missing query parameters", { status: 400 });
+  if (!category) {
+    return new Response("Missing category parameter", { status: 400 });
   }
 
-  const targetUrl = `https://www.approvedbusiness.co.uk/${category}/list_${page}.aspx`;
-  const res = await fetch(targetUrl);
-  const html = await res.text();
+  const targetUrl = `https://www.approvedbusiness.co.uk/search/${category}/list_${page}.aspx`;
 
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  if (!doc) {
-    return new Response("Failed to parse HTML", { status: 500 });
-  }
+  try {
+    const rawHtml = await fetch(targetUrl).then((res) => res.text());
+    const doc = new DOMParser().parseFromString(rawHtml, "text/html");
 
-  const results: { company: string; website: string; source: string }[] = [];
-
-  const items = doc.querySelectorAll(".listingDetails");
-  items.forEach((item) => {
-    const companyAnchor = item.querySelector(".title_link");
-    const websiteAnchor = item.querySelector("a.button");
-
-    const company = companyAnchor?.textContent?.trim();
-    const website = websiteAnchor?.getAttribute("href");
-
-    if (company && website) {
-      results.push({
-        company,
-        website,
-        source: targetUrl,
-      });
+    if (!doc) {
+      return new Response("Failed to parse HTML", { status: 500 });
     }
-  });
 
-  return new Response(JSON.stringify(results, null, 2), {
-    headers: { "Content-Type": "application/json" },
-  });
+    const results = [];
+    const companyBlocks = doc.querySelectorAll(".search-listing");
+
+    companyBlocks.forEach((block) => {
+      const titleAnchor = block.querySelector(".title_link");
+      const websiteButton = block.querySelector('a.button[href^="http"]');
+
+      if (titleAnchor && websiteButton) {
+        results.push({
+          company: titleAnchor.textContent.trim(),
+          website: websiteButton.getAttribute("href").trim(),
+        });
+      }
+    });
+
+    return new Response(JSON.stringify({ results }, null, 2), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    return new Response("Error fetching or parsing data: " + err.message, {
+      status: 500,
+    });
+  }
 });
