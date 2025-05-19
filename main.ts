@@ -1,42 +1,39 @@
 // main.ts
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+const BROWSERLESS_KEY = "2SLAHnqluSvXeMp18be79ff955e357e44cfce17df6fb1bd23";
 
-// Replace this with your real Browserless token:
-const BROWSERLESS_TOKEN = "2SLAHnqluSvXeMp18be79ff955e357e44cfce17df6fb1bd23";
-
-serve(async (req) => {
-  const { searchParams } = new URL(req.url);
-  const category = searchParams.get("category");
-  const page = searchParams.get("page") || "1";
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  const category = url.searchParams.get("category");
+  const page = url.searchParams.get("page") || "1";
 
   if (!category) {
-    return new Response("Missing category parameter", { status: 400 });
+    return new Response("Missing 'category' query param", { status: 400 });
   }
 
   const targetUrl = `https://www.approvedbusiness.co.uk/search/${category}?page=${page}`;
-  const browserlessUrl = `https://chrome.browserless.io/content?token=${BROWSERLESS_TOKEN}`;
+  const browserlessUrl = "https://chrome.browserless.io/content?token=" + BROWSERLESS_KEY;
 
-  // Get fully rendered HTML from Browserless
   const response = await fetch(browserlessUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: targetUrl })
+    body: JSON.stringify({
+      url: targetUrl,
+      waitForSelector: ".listing",
+    }),
   });
 
   const html = await response.text();
 
-  // Match company name and website button
-  const regex = /<a class="title_link" href="[^"]*">(.*?)<\/a>[\s\S]*?<a class="button" href="(https?:\/\/[^"]+)"/g;
-  const matches = [...html.matchAll(regex)];
+  const companyRegex = /<a class="title_link" href="([^"]+)">([^<]+)<\/a>[\s\S]*?<a class="button" href="(https?:\/\/[^"]+)"[^>]*>Website<\/a>/g;
+  const matches = [...html.matchAll(companyRegex)];
 
-  const companies = matches.map(match => ({
-    name: match[1].trim(),
-    website: match[2].trim(),
-    source: targetUrl
+  const results = matches.map((m) => ({
+    company: m[2].trim(),
+    website: m[3].trim(),
+    source: "https://www.approvedbusiness.co.uk" + m[1].trim(),
   }));
 
-  return new Response(JSON.stringify(companies, null, 2), {
-    headers: { "Content-Type": "application/json" }
+  return new Response(JSON.stringify(results, null, 2), {
+    headers: { "Content-Type": "application/json" },
   });
 });
-
