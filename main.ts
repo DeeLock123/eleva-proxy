@@ -1,4 +1,5 @@
-import { serve } from "https://deno.land/std/http/server.ts";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.36/deno-dom-wasm.ts";
 
 serve(async (req) => {
   const { searchParams } = new URL(req.url);
@@ -10,18 +11,34 @@ serve(async (req) => {
   }
 
   const targetUrl = `https://www.approvedbusiness.co.uk/${category}/list_${page}.aspx`;
-  try {
-    const response = await fetch(targetUrl);
-    const html = await response.text();
+  const res = await fetch(targetUrl);
+  const html = await res.text();
 
-    return new Response(html, {
-      status: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "text/html",
-      },
-    });
-  } catch (error) {
-    return new Response("Failed to fetch", { status: 500 });
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  if (!doc) {
+    return new Response("Failed to parse HTML", { status: 500 });
   }
+
+  const results: { company: string; website: string; source: string }[] = [];
+
+  const items = doc.querySelectorAll(".listingDetails");
+  items.forEach((item) => {
+    const companyAnchor = item.querySelector(".title_link");
+    const websiteAnchor = item.querySelector("a.button");
+
+    const company = companyAnchor?.textContent?.trim();
+    const website = websiteAnchor?.getAttribute("href");
+
+    if (company && website) {
+      results.push({
+        company,
+        website,
+        source: targetUrl,
+      });
+    }
+  });
+
+  return new Response(JSON.stringify(results, null, 2), {
+    headers: { "Content-Type": "application/json" },
+  });
 });
